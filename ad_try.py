@@ -15,7 +15,7 @@ from utils.helper import GETTGT
 from utils.S4U2self import GETST
 from impacket.dcerpc.v5 import samr, nrpc, epm, transport
 
-def ldap_spray(ldap_searcher, wordlist='/home/kali/tools/wordlists-master/OCD_common_users_FR.txt'):
+def ldap_spray(ldap_searcher, wordlist='/usr/share/wordlists/your_username_wordlist'):
 		with open(wordlist, 'r') as f:
 			words = f.readlines()
 
