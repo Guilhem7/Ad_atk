@@ -1,7 +1,8 @@
 # Ad_atk
 Basic script to try basic attacks on Active Directory
+Require either /etc/resolv.conf or a file named dc.txt containing the needed informations
 
-# Script idea
+## Script idea
 - Parse /etc/resolv.conf to get Domain name, and DC name/ip
 - Try anonymous query (via ldap) on the first DC
 - Test for zerologon (Cannot exploit it)
