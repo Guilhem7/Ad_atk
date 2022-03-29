@@ -11,5 +11,7 @@ Require either /etc/resolv.conf or a file named dc.txt containing the needed inf
     - Recover domain users (via ldap)
     - Recover Interesting description (containing 'pw','=','pass')
     - Recover Domain Admin
-    - Try cve SamAccount Spoofing (over SAMR) with the account found and Choosing one DA from previous result
+    - Try cve SamAccountName Spoofing (over SAMR) with the account found and Choosing one DA from previous result
 - Exit
+
+(The script sam spoof also TRY to remove the computer if it already exist)
