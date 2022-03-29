@@ -21,7 +21,7 @@ from impacket.examples.utils import parse_credentials
 from impacket.krb5.kerberosv5 import getKerberosTGT
 from impacket.krb5 import constants
 from impacket.krb5.types import Principal
-
+### Script saw on github, used for kerberos part
 
 def get_machine_name(args, domain):
     if args.dc_ip is not None:
