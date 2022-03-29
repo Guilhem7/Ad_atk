@@ -16,3 +16,7 @@ Require of course impacket
 - Exit
 
 (The script sam spoof also TRY to remove the computer if it already exist)
+
+```python
+python3 ad_try.py
+```
