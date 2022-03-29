@@ -1,6 +1,7 @@
 # Ad_atk
 Basic script to try basic attacks on Active Directory
 Require either /etc/resolv.conf or a file named dc.txt containing the needed informations
+Require of course impacket
 
 ## Script idea
 - Parse /etc/resolv.conf to get Domain name, and DC name/ip
