@@ -55,9 +55,9 @@ class LdapSearch:
 	def flush_res(self):
 		self.res = []
 
-	def exec(self, action):
+	def exec(self, action, quiet=False):
 		self.flush_res()
-		to_look = action.lower() if(action.lower() in ['da', 'desc', 'users', 'all_desc']) else None
+		to_look = action.lower() if(action.lower() in ['da', 'desc', 'users', 'all_desc', 'computers']) else None
 		if(to_look is None):
 			warn("Unknown action :(")
 			return 0
@@ -96,6 +96,15 @@ class LdapSearch:
 				except:
 					pass
 
+		elif(to_look == 'computers'):
+			self.conn.search(self.search_b, '(objectclass=computer)', attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES])
+			for e in self.conn.entries:
+				try:
+					name = str(e.samAccountName)
+					self.res.append(name.rstrip('$'))
+				except:
+					pass
+
 		else:
 			self.conn.search(self.search_b, '(|(objectclass=person)(objectclass=computer))', attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES])
 			for e in self.conn.entries:
@@ -110,15 +119,16 @@ class LdapSearch:
 
 		if(len(self.res) != 0):
 			success('Query executed with success')
-			for e in self.res:
-				log(e)
-			save_it = input('Save result to file ? (Y/N) ')
-			if(save_it.upper() == 'Y'):
-				filename = input('Filename: ')
-				with open(filename, 'w') as f:
-					for r in self.res:
-						f.write(r + '\n')
-				success(f'Result saved in {filename}')
+			if(not(quiet)):
+				for e in self.res:
+					log(e)
+				save_it = input('Save result to file ? (Y/N) ')
+				if(save_it.upper() == 'Y'):
+					filename = input('Filename: ')
+					with open(filename, 'w') as f:
+						for r in self.res:
+							f.write(r + '\n')
+					success(f'Result saved in {filename}')
 
 		else:
 			warn('No result from query')
