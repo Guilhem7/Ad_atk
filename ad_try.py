@@ -40,6 +40,7 @@ class CheckAdminThread(threading.Thread):
 		self.password = password
 		self.domain_name = domain_name
 		self.queue = queue
+		self.admin_res = []
 
 	def run(self):
 		while True:
@@ -49,6 +50,7 @@ class CheckAdminThread(threading.Thread):
 				r = is_admin(comp, self.username, self.password, self.domain_name)
 				if(r):
 					success(f"{self.username} is admin on {comp}")
+					self.admin_res.append(comp)
 			else:
 				break
 
@@ -245,19 +247,19 @@ if __name__ == '__main__':
 				save(ldap_requester.account, 'valid_accounts.txt')
 
 			account_found = 1
-		else:
-			if(input("Wanna add an account ? (Y/N) ").lower() == 'y'):
-				username, password = input("Enter username/password: ").strip().split('/')
-				ldap_requester.add_account(username, password)
-				ldap_requester.exec('users')
-				
-				if(len(ldap_requester.res) != 0):
-					success('Account valid')
-					account_found = 1
-				
-				else:
-					warn('Account not valid')
-					account_found = 0
+	else:
+		if(input("Wanna add an account ? (Y/N) ").lower() == 'y'):
+			username, password = input("Enter username/password: ").strip().split('/')
+			ldap_requester.add_account(username, password)
+			ldap_requester.exec('users', quiet=True)
+			
+			if(len(ldap_requester.res) != 0):
+				success('Account valid')
+				account_found = 1
+			
+			else:
+				warn('Account not valid')
+				account_found = 0
 
 
 
@@ -290,15 +292,18 @@ if __name__ == '__main__':
 					is_admin_thread = CheckAdminThread(username, password, domain_name, computer_queue)
 					Threading_list.append(is_admin_thread)
 
-			log(f"Launching check on {len(computers_list)} computers with user {username}")
+			log(f"Launching check on {len(computers_list)} computers with user \x1b[41m{username}\x1b[0m")
 			for thread in Threading_list:
 				thread.start()
 
+			### Saving results
+			admin_users[username] = []
 			for thread_end in Threading_list:
+				admin_users[username] += thread_end.admin_res
 				thread_end.join()
-		
+
 		if(len(admin_users) != 0):
-			save(admin_users)
+			save(admin_users, 'admin_users.list')
 
 		section("Recovering info")
 		ldap_requester.add_account(list(ldap_requester.account.keys())[0], list(ldap_requester.account.values())[0])
@@ -306,6 +311,8 @@ if __name__ == '__main__':
 		ldap_requester.exec('users')
 		section("Juicy description")
 		ldap_requester.exec('desc')
+		# section("SQL Server")
+		# ldap_requester.exec("mssql")
 		section("DA Users")
 		ldap_requester.exec('da')
 
