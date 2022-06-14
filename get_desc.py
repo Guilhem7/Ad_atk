@@ -31,8 +31,15 @@ class LdapSearch:
 			if(self.username != '' and self.password != ''):
 				try:
 					self.conn = Connection(self.server, user=f'{self.domain}\\{self.username}', password=self.password, authentication=NTLM, auto_bind=True)
-					success(f'Authenticated with {self.domain}\\{self.username}:{self.password}')
-					self.account[self.username] = self.password
+
+					### Verifying account by requesting domain controllers ###
+					self.exec('dc', quiet=True)
+					if(len(self.res) > 0):
+						success(f'Account valid: {self.domain}\\{self.username}:{self.password}')
+						self.account[self.username] = self.password
+					else:
+						raise LDAPBindError
+
 				except LDAPBindError:
 					warn(f'Auth failed for: {self.username}:{self.password}')
 
@@ -44,8 +51,8 @@ class LdapSearch:
 
 	def init_all(self):
 		self.init_server()
-		self.init_connection()
 		self.dns2ldap(self.domain)
+		self.init_connection()
 
 	def add_account(self, username, password):
 		self.username = username
@@ -57,7 +64,7 @@ class LdapSearch:
 
 	def exec(self, action, quiet=False):
 		self.flush_res()
-		to_look = action.lower() if(action.lower() in ['da', 'desc', 'users', 'all_desc', 'computers']) else None
+		to_look = action.lower() if(action.lower() in ['da', 'desc', 'users', 'all_desc', 'computers', 'dc', 'mssql', 'exchange']) else None
 		if(to_look is None):
 			warn("Unknown action :(")
 			return 0
@@ -77,8 +84,29 @@ class LdapSearch:
 				except:
 					pass
 
+		elif(to_look == 'dc'):
+			self.conn.search(self.search_b, '(&(objectCategory=computer)(userAccountControl:1.2.840.113556.1.4.803:=8192))', attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES])
+			for e in self.conn.entries:
+				try:
+					name = str(e.samAccountName)
+					self.res.append(name)
+				
+				except:
+					pass
+
+		elif(to_look == "mssql"):
+			self.conn.search(self.search_b, '(&(objectCategory=computer)(servicePrincipalName=MSSQLSvc*))', attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES])
+			for e in self.conn.entries:
+				try:
+					name = str(e.samAccountName)
+					self.res.append(name.rstrip('$'))
+				
+				except:
+					pass
+
+
 		elif(to_look == 'users'):
-			self.conn.search(self.search_b, '(objectclass=person)', attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES])
+			self.conn.search(self.search_b, '(&(objectClass=user)(objectCategory=Person))', attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES])
 			for e in self.conn.entries:
 				try:
 					name = str(e.samAccountName)
@@ -87,7 +115,7 @@ class LdapSearch:
 				except:
 					pass
 		elif(to_look == 'all_desc'):
-			self.conn.search(self.search_b, '(|(objectclass=person)(objectclass=computer))', attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES])
+			self.conn.search(self.search_b, '(|(objectCategory=person)(objectCategory=computer))', attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES])
 			for e in self.conn.entries:
 				try:
 					desc = str(e.description)
@@ -97,7 +125,16 @@ class LdapSearch:
 					pass
 
 		elif(to_look == 'computers'):
-			self.conn.search(self.search_b, '(objectclass=computer)', attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES])
+			self.conn.search(self.search_b, '(objectCategory=computer)', attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES])
+			for e in self.conn.entries:
+				try:
+					name = str(e.samAccountName)
+					self.res.append(name.rstrip('$'))
+				except:
+					pass
+
+		elif(to_look == 'exchange'):
+			self.conn.search(self.search_b, '(&(objectCategory=computer)(servicePrincipalName=exchangeMDB*)(operatingSystem=Windows Server*))', attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES])
 			for e in self.conn.entries:
 				try:
 					name = str(e.samAccountName)
@@ -106,7 +143,7 @@ class LdapSearch:
 					pass
 
 		else:
-			self.conn.search(self.search_b, '(|(objectclass=person)(objectclass=computer))', attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES])
+			self.conn.search(self.search_b, '(|(objectCategory=person)(objectCategory=computer))', attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES])
 			for e in self.conn.entries:
 				try:
 					desc = str(e.description)
@@ -118,8 +155,8 @@ class LdapSearch:
 					pass
 
 		if(len(self.res) != 0):
-			success('Query executed with success')
 			if(not(quiet)):
+				success('Query executed with success')
 				for e in self.res:
 					log(e)
 				save_it = input('Save result to file ? (Y/N) ')
@@ -131,7 +168,8 @@ class LdapSearch:
 					success(f'Result saved in {filename}')
 
 		else:
-			warn('No result from query')
+			if(not(quiet)):
+				warn('No result from query')
 
 
 if __name__ == '__main__':
@@ -150,7 +188,7 @@ if __name__ == '__main__':
 
 	domain, dc_ip, action = options.domain_name, options.dc_ip, options.a
 	if(domain == None or dc_ip == None or action == None):
-		warn(f'DC hostname / ip  and action should be specified:\n\t- python3 {sys.argv[0]} -dc-host <host> -dc-ip <ip> -a <action>')
+		warn(f'Domain name / ip  and action should be specified:\n\t- python3 {sys.argv[0]} -dc-host <host> -dc-ip <ip> -a <action>')
 		exit(0)
 
 	username = options.u if(options.u != None) else ''
