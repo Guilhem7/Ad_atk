@@ -8,7 +8,8 @@ Require of course impacket
 - Try anonymous query (via ldap) on the first DC
 - Test for zerologon (Cannot exploit it)
 - Launch password spray (via ldap) with a predefined user list
-- If account found:
+- If account found: (or if you know one you cann add it by skipping steps)
+    - Try this account on ALL domains computers to see if this user is admin on it
     - Recover domain users (via ldap)
     - Recover Interesting description (containing 'pw','=','pass')
     - Recover Domain Admin
